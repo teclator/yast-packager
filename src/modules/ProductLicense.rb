@@ -10,6 +10,8 @@
 #		Lukas Ocilka <locilka@suse.cz>
 #
 require "yast"
+require "tmpdir"
+require "fileutils"
 
 module Yast
   class ProductLicenseClass < Module
@@ -631,55 +633,84 @@ module Yast
       nil
     end
 
+    class License
+      attr_reader :directory, :file_print
+
+      LICENSE_TARBALL = "license.tar.gz"
+      def self.find_license(locations)
+        license_paths = locations.map { |l| l+= "/#{LICENSE_TARBALL}" }
+
+        license_path = locations.find { |l| FileUtils.Exists(l) }
+
+        log.info "License path #{license_path.inspect}"
+
+        return license_path ? License.new(license_path) : nil
+      end
+
+      def initialize(path)
+        @file_print = path
+        unpack_tarball(path)
+        @directory = @tmpdir
+      end
+
+      def cleanup
+        ::FileUtils.rm_rf(@tmpdir) if @tmpdir
+        @directory = nil
+        @file_print = nil
+      end
+
+      private
+
+      def unpack_tarball(path)
+        @tmpdir = ::Dir.mktmpdir("products_license_store")
+        res = SCR.Execute(Yast::Path.new(".target.bash_output"),
+          "tar -xzf '#{@tmpdir}' -C '#{String.Quote(path)}'",
+        )
+
+        if res["exit"] != 0
+          log.error "Unpacking tarball failed with #{res["stderr"]}"
+          # FIXME better raise exception to as this object is then crippled
+          cleanup
+        end
+      end
+    end
+
+    class Info
+      include Yast::Logger
+
+      attr_reader :path
+
+      BETA_FILE = "README.BETA"
+
+      def self.find_beta(locations)
+        locations = locations.map { |l| l += "/#{BETA_FILE}" }
+        path = locations.find do |info_location|
+          FileUtils.Exists(info_location)
+        end
+
+        log.info "Info file: #{path.inspect}"
+
+        return path ? Info.new(path) : nil
+      end
+
+      def initialize path
+        @path = path
+      end
+    end
+
     def SearchForLicense_LiveCDInstallation(src_id, fallback_dir)
       Builtins.y2milestone("LiveCD License")
 
       # BNC #594042: Multiple license locations
       license_locations = ["/usr/share/doc/licenses/", "/"]
 
-      @license_dir = nil
-      @info_file = nil
+      # FIXME leaking of tmpdir, but do not store tmpdir to @tmpdir
+      license = License.find_license(license_locations)
+      @license_dir = license ? license.directory : nil
+      @license_file_print = license.file_print if license
 
-      Builtins.foreach(license_locations) do |license_location|
-        license_location = Builtins.sformat(
-          "%1/license.tar.gz",
-          license_location
-        )
-        if FileUtils.Exists(license_location)
-          Builtins.y2milestone("Using license: %1", license_location)
-          @tmpdir = Builtins.sformat(
-            "%1/product-license/LiveCD/",
-            Convert.to_string(SCR.Read(path(".target.tmpdir")))
-          )
-
-          if UnpackLicenseTgzFileToDirectory(license_location, @tmpdir)
-            @license_dir = @tmpdir
-            @license_file_print = "license.tar.gz"
-          else
-            CleanUpLicense(@tmpdir)
-          end
-          raise Break
-        end
-      end
-
-      if @license_dir == nil
-        Builtins.y2milestone("No license found in: %1", license_locations)
-      end
-
-      Builtins.foreach(license_locations) do |info_location|
-        info_location = Builtins.sformat("%1/README.BETA", info_location)
-        if FileUtils.Exists(info_location)
-          Builtins.y2milestone("Using info file: %1", info_location)
-          @info_file = info_location
-          raise Break
-        end
-      end
-
-      if @info_file == nil
-        Builtins.y2milestone("No info file found in: %1", license_locations)
-      end
-
-      nil
+      info = Info.find_beta(license_locations)
+      @info_file = info ? info.path : nil
     end
 
     def SearchForLicense_NormalRunBaseProduct(src_id, fallback_dir)
