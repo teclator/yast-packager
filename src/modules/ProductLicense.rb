@@ -15,6 +15,7 @@ require "fileutils"
 
 module Yast
   class ProductLicenseClass < Module
+    include Logger
     attr_accessor :license_patterns
 
     def main
@@ -567,72 +568,6 @@ module Yast
 
     # Functions for handling different locations of licenses -->
 
-
-    def UnpackLicenseTgzFileToDirectory(unpack_file, to_directory)
-      # License file exists
-      if FileUtils.Exists(unpack_file)
-        out = Convert.to_map(
-          SCR.Execute(
-            path(".target.bash_output"),
-            Builtins.sformat(
-              "\nrm -rf '%1' && mkdir -p '%1' && cd '%1' && tar -xzf '%2'\n",
-              String.Quote(to_directory),
-              String.Quote(unpack_file)
-            )
-          )
-        )
-
-        # Extracting license failed, cannot accept the license
-        if Ops.get_integer(out, "exit", 0) != 0
-          Builtins.y2error("Cannot untar license -> %1", out)
-          # popup error
-          Report.Error(
-            _("An error occurred while preparing the installation system.")
-          )
-          CleanUpLicense(to_directory)
-          return false
-        end
-
-        # Success
-        return true 
-
-        # Nothing to unpack
-      else
-        Builtins.y2error("No such file: %1", unpack_file)
-        return false
-      end
-    end
-
-    def SearchForLicense_FirstStageBaseProduct(src_id, fallback_dir)
-      Builtins.y2milestone("Getting license from installation product")
-
-      license_file = "/license.tar.gz"
-
-      if FileUtils.Exists(license_file)
-        Builtins.y2milestone("Installation Product has a license")
-
-        @tmpdir = Builtins.sformat(
-          "%1/product-license/base-product/",
-          Convert.to_string(SCR.Read(path(".target.tmpdir")))
-        )
-
-        if UnpackLicenseTgzFileToDirectory(license_file, @tmpdir)
-          @license_dir = @tmpdir
-          @license_file_print = "license.tar.gz"
-        else
-          license_file = nil
-        end
-      else
-        Builtins.y2milestone("Installation Product doesn't have a license")
-
-        license_file = nil
-      end
-
-      @info_file = "/info.txt" if FileUtils.Exists("/info.txt")
-
-      nil
-    end
-
     class License
       attr_reader :directory, :file_print
 
@@ -710,6 +645,29 @@ module Yast
       def initialize path
         @path = path
       end
+    end
+
+    def SearchForLicense_FirstStageBaseProduct(src_id, fallback_dir)
+      Builtins.y2milestone("Getting license from installation product")
+
+      license_file = "/license.tar.gz"
+
+      if FileUtils.Exists(license_file)
+        log.info("Installation Product has a license")
+
+        License.new(license_file)
+
+        if license.directory # not needed when exception used
+          @license_dir = license.directory
+          @license_file_print = license.file_print
+        end
+      else
+        log.info("Installation Product doesn't have a license")
+      end
+
+      @info_file = "/info.txt" if FileUtils.Exists("/info.txt")
+
+      nil
     end
 
     def SearchForLicense_LiveCDInstallation(src_id, fallback_dir)
