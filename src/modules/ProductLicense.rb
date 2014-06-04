@@ -20,18 +20,18 @@ module Yast
       Yast.import "UI"
 
       Yast.import "Directory"
+      Yast.import "FileUtils"
       Yast.import "InstShowInfo"
       Yast.import "Language"
+      Yast.import "Mode"
       Yast.import "Popup"
+      Yast.import "ProductFeatures"
+      Yast.import "Progress"
       Yast.import "Report"
       Yast.import "Stage"
-      Yast.import "Wizard"
-      Yast.import "Mode"
-      Yast.import "FileUtils"
-      Yast.import "ProductFeatures"
       Yast.import "String"
+      Yast.import "Wizard"
       Yast.import "WorkflowManager"
-      Yast.import "Progress"
 
       # IMPORTANT: maintainer of yast2-installation is responsible for this module
 
