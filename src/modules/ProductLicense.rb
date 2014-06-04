@@ -812,7 +812,7 @@ module Yast
       # all other 'licenses' could be replaced by this one
       Ops.set(@all_licenses, id, licenses.value)
 
-      return :auto if @info_file == nil && Builtins.size(licenses.value) == 0
+      return :auto if info.nil? && Builtins.size(licenses.value) == 0
 
       # Let's do getenv here. Language::language may not be initialized
       # by now (see bnc#504803, c#28). Language::Language does only
@@ -829,51 +829,36 @@ module Yast
         "en",
         ""
       ] # license.txt fallback
-      available_langs.value = Builtins.maplist(licenses.value) do |lang, fn|
-        lang
-      end
+      available_langs.value = licenses.value.keys
 
       # "en" is the same as "", we don't need to have them both
-      if Builtins.contains(available_langs.value, "en") &&
-          Builtins.contains(available_langs.value, "")
-        Builtins.y2milestone(
-          "Removing license fallback '' as we already have 'en'..."
-        )
-        available_langs.value = Builtins.filter(available_langs.value) do |one_lang|
-          one_lang != "en"
-        end
+      if available_langs.value.include?("en") &&
+          available_langs.value.include?("")
+        log.info "Removing license fallback '' as we already have 'en'..."
+        available_langs.value.delete("en")
       end
 
-      Builtins.y2milestone("Preffered lang: %1", language)
-      return :auto if Builtins.size(available_langs.value) == 0 # no license available
-      @lic_lang = Builtins.find(langs) { |l| Builtins.haskey(licenses.value, l) }
-      @lic_lang = Ops.get(available_langs.value, 0, "") if @lic_lang == nil
+      log.info "Preffered lang: #{language}"
+      return :auto if available_langs.value.empty? # no license available
+      @lic_lang = langs.find { |l| licenses.value.include?(l) }
+      @lic_lang ||= available_langs.value.first
 
-      Builtins.y2milestone("Preselected language: '%1'", @lic_lang)
+      log.info "Preselected language: '#{@lic_lang}'"
 
       if @lic_lang == nil
-        CleanUpLicense(@tmpdir) if @tmpdir != nil
+        license.cleanup
         return :auto
       end
 
       # Check whether such license hasn't been already accepted
       # Bugzilla #305503
-      license_ident_lang = nil
-
       # We need to store the original -- not localized license ID (if possible)
-      Builtins.foreach(["", "en", @lic_lang]) do |check_this|
-        if Builtins.contains(available_langs.value, check_this)
-          license_ident_lang = check_this
-          Builtins.y2milestone(
-            "Using localization '%1' (for license ID)",
-            license_ident_lang
-          )
-          raise Break
-        end
+      license_ident_lang = ["", "en", @lic_lang].find do |lang|
+        available_langs.value.include?(check_this)
       end
 
       # fallback
-      license_ident_lang = @lic_lang if license_ident_lang == nil
+      license_ident_lang ||= @lic_lang
 
       base_license = (
         licenses_ref = arg_ref(licenses.value);
@@ -892,16 +877,15 @@ module Yast
       # see also BNC #448598
       # Even if it it shown it sometimes doesn't need to be even accepted by
       # selecting "yes, I agree"
-      if require_agreement != true &&
-          Builtins.tostring(license_ident.value) != nil &&
-          Ops.greater_than(Builtins.size(license_ident.value), 33) &&
+      if !require_agreement && license_ident.value &&
+          license_ident.value.size > 33 &&
           IsLicenseAlreadyAccepted(license_ident.value)
-        Builtins.y2milestone("License has been already accepted/shown")
+        log.info "License has been already accepted/shown"
 
-        CleanUpLicense(@tmpdir)
+        license.cleanup
         return :accepted
       else
-        Builtins.y2milestone("License needs to be shown")
+        log.info "License needs to be shown"
       end
 
       # bugzilla #303922
