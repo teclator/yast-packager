@@ -647,7 +647,7 @@ module Yast
       end
     end
 
-    def SearchForLicense_FirstStageBaseProduct(src_id, fallback_dir)
+    def SearchForLicense_FirstStageBaseProduct
       Builtins.y2milestone("Getting license from installation product")
 
       license_file = "/license.tar.gz"
@@ -670,7 +670,7 @@ module Yast
       nil
     end
 
-    def SearchForLicense_LiveCDInstallation(src_id, fallback_dir)
+    def SearchForLicense_LiveCDInstallation
       Builtins.y2milestone("LiveCD License")
 
       # BNC #594042: Multiple license locations
@@ -684,7 +684,7 @@ module Yast
       info = Info.find_beta(license_locations)
     end
 
-    def SearchForLicense_NormalRunBaseProduct(src_id, fallback_dir)
+    def SearchForLicense_NormalRunBaseProduct(fallback_dir)
       Builtins.y2milestone("Using default license directory %1", fallback_dir)
 
       if FileUtils.Exists(fallback_dir)
@@ -699,7 +699,7 @@ module Yast
       nil
     end
 
-    def SearchForLicense_AddOnProduct(src_id, fallback_dir)
+    def SearchForLicense_AddOnProduct(src_id)
       Builtins.y2milestone("Getting license info from repository %1", src_id)
 
       @info_file = Pkg.SourceProvideDigestedFile(
@@ -791,29 +791,24 @@ module Yast
       # Bugzilla #299732
       # Base Product - LiveCD installation
       if Mode.live_installation
-        SearchForLicense_LiveCDInstallation(src_id, fallback_dir) 
+        SearchForLicense_LiveCDInstallation
 
         # Base-product - license not in installation
         #   * Stage is not initial
         #   * source ID is not defined
       elsif !Stage.initial && src_id == nil
-        SearchForLicense_NormalRunBaseProduct(src_id, fallback_dir) 
+        SearchForLicense_NormalRunBaseProduct(fallback_dir)
 
         # Base-product - first-stage installation
         #   * Stage is initial
         #   * Source ID is not set
         # bugzilla #298342
       elsif Stage.initial && src_id == nil
-        SearchForLicense_FirstStageBaseProduct(
-          src_id == nil ? Ops.get(Pkg.SourceGetCurrent(true), 0, 0) : src_id,
-          fallback_dir
-        ) 
-
+        SearchForLicense_FirstStageBaseProduct
         # Add-on-product license
         #   * Source ID is set
       elsif src_id != nil && Ops.greater_than(src_id, -1)
-        SearchForLicense_AddOnProduct(src_id, fallback_dir) 
-
+        SearchForLicense_AddOnProduct(src_id)
         # Fallback
       else
         Builtins.y2warning(
