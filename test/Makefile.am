@@ -4,5 +4,6 @@ TESTS = \
 
 TEST_EXTENSIONS = .rb
 RB_LOG_COMPILER = rspec
+AM_RB_LOG_FLAGS = --format doc
 VERBOSE = 1
 EXTRA_DIST = $(TESTS)
