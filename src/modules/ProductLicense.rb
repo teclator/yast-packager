@@ -1292,28 +1292,7 @@ module Yast
 
 
 
-    # Ask user to confirm license agreement
-    # @param src_id integer repository to get the license from.
-    #   If set to 'nil', the license is considered to belong to a base product
-    # @param [Array<String>] dirs - directories to look for the licenses
-    # @param [Array<String>] patterns a list of patterns for the files, regular expressions
-    #   with %1 for the language
-    # @param [Boolean] enable_back sets the back_button status
-    # @param [Boolean] base_product defines whether it is a base or add-on product
-    #   true means base product, false add-on product
-    # @param [Boolean] require_agreement means that even if the license (or the very same license)
-    #   has been already accepetd, ask user to accept it again (because of 'going back'
-    #   in the installation proposal).
-    def AskLicensesAgreement(dirs, patterns, action, enable_back, base_product, require_agreement)
-      # dialog caption
-      caption = _("License Agreement")
-      heading = nil
-
-      AskLicensesAgreementWithHeading(dirs, patterns, action, enable_back,
-          base_product, require_agreement, caption, heading)
-    end
-
-    # @see {AskLicensesAgreement} for details
+    # @see {AskInstalledLicensesAgreement} for details
     # @param caption [String] custom dialog title
     # @param heading [String] optional heading displayed above the license text
     def AskLicensesAgreementWithHeading(dirs, patterns, action, enable_back,
@@ -1629,11 +1608,19 @@ module Yast
       )
     end
 
-    # FATE #306295: More licenses in one dialog
+    # Ask user to confirm license agreement for installed products
+    # @param [Array<String>] dirs - directories to look for the licenses
+    # @param [String] action - specify action to do if license is declined. Known
+    #    values are `halt`, `continue` and `break`
+    # @note see FATE #306295: More licenses in one dialog
     def AskInstalledLicensesAgreement(directories, action)
       directories = deep_copy(directories)
+      caption = _("License Agreement")
+      heading = nil
+
       # patterns are hard-coded
-      AskLicensesAgreement(directories, [], action, false, true, false)
+      AskLicensesAgreementWithHeading(directories, [], action, false, true,
+        false, caption, heading)
     end
 
     publish :function => :AcceptanceNeeded, :type => "boolean (string)"
