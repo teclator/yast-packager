@@ -1127,8 +1127,6 @@ module Yast
     #   If set to 'nil', the license is considered to belong to a base product
     # @param [String] dir string directory to look for the license in if src_id is nil
     #   and not 1st stage installation
-    # @param [Array<String>] patterns a list of patterns for the files, regular expressions
-    #   with %1 for the language
     # @param [Boolean] enable_back sets the back_button status
     # @param [Boolean] base_product defines whether it is a base or add-on product
     #   true means base product, false add-on product
@@ -1137,8 +1135,7 @@ module Yast
     #   in the installation proposal).
     # @param [String] id, usually source id but it can be any unique id in UI. Well, of course
     #   it must be string.
-    def AskLicenseAgreement(src_id, dir, patterns, action, enable_back, base_product, require_agreement, id)
-      patterns = deep_copy(patterns)
+    def AskLicenseAgreement(src_id, dir, action, enable_back, base_product, require_agreement, id)
       @lic_lang = ""
       licenses = {}
       available_langs = []
@@ -1238,10 +1235,9 @@ module Yast
     # @see {AskInstalledLicensesAgreement} for details
     # @param caption [String] custom dialog title
     # @param heading [String] optional heading displayed above the license text
-    def AskLicensesAgreementWithHeading(dirs, patterns, action, enable_back,
+    def AskLicensesAgreementWithHeading(dirs, action, enable_back,
           base_product, require_agreement, caption, heading)
       dirs = deep_copy(dirs)
-      patterns = deep_copy(patterns)
       if dirs == nil || dirs == []
         Builtins.y2error("No directories: %1", dirs)
         # error message
@@ -1382,7 +1378,6 @@ module Yast
       AskLicenseAgreement(
         src_id,
         "",
-        @license_patterns,
         "abort",
         # back button is disabled
         false,
@@ -1402,7 +1397,6 @@ module Yast
       AskLicenseAgreement(
         nil,
         "",
-        @license_patterns,
         action,
         # back button is enabled
         enable_back,
@@ -1538,11 +1532,9 @@ module Yast
     end
 
     def AskInstalledLicenseAgreement(directory, action)
-      # patterns are hard-coded
       AskLicenseAgreement(
         nil,
         directory,
-        [],
         action,
         false,
         true,
@@ -1561,8 +1553,7 @@ module Yast
       caption = _("License Agreement")
       heading = nil
 
-      # patterns are hard-coded
-      AskLicensesAgreementWithHeading(directories, [], action, false, true,
+      AskLicensesAgreementWithHeading(directories, action, false, true,
         false, caption, heading)
     end
 
