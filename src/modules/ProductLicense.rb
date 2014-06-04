@@ -521,51 +521,6 @@ module Yast
       nil
     end
 
-    # Get all files with license existing in specified directory
-    # @param [String] dir string directory to look into
-    # @param [Array<String>] patterns a list of patterns for the files, regular expressions
-    #   with %1 for the language
-    # @return a map $[ lang_code : filename ]
-    def LicenseFiles(dir, patterns)
-      patterns = deep_copy(patterns)
-      ret = {}
-
-      return deep_copy(ret) if dir == nil
-
-      files = Convert.convert(
-        SCR.Read(path(".target.dir"), dir),
-        :from => "any",
-        :to   => "list <string>"
-      )
-      Builtins.y2milestone("All files in license directory: %1", files)
-
-      # no license
-      return {} if files == nil
-
-      Builtins.foreach(patterns) do |p|
-        if !Builtins.issubstring(p, "%")
-          Builtins.foreach(files) do |file|
-            #Possible license file names are regexp patterns
-            #(see list <string> license_patterns)
-            #so we should treat them as such (bnc#533026)
-            if Builtins.regexpmatch(file, p)
-              Ops.set(ret, "", Ops.add(Ops.add(dir, "/"), file))
-            end
-          end
-        else
-          regpat = Builtins.sformat(p, "(.+)")
-          Builtins.foreach(files) do |file|
-            if Builtins.regexpmatch(file, regpat)
-              key = Builtins.regexpsub(file, regpat, "\\1")
-              Ops.set(ret, key, Ops.add(Ops.add(dir, "/"), file))
-            end
-          end
-        end
-      end
-      Builtins.y2milestone("Files containing license: %1", ret)
-      deep_copy(ret)
-    end
-
     # Functions for handling different locations of licenses -->
 
     class License
@@ -610,6 +565,44 @@ module Yast
 
       def acceptance_needed?
         !FileUtils.Exists("#{directory}/no-acceptance-needed")
+      end
+
+      # Get all files with license existing in specified directory
+      # @param [String] dir string directory to look into
+      # @param [Array<String>] patterns a list of patterns for the files, regular expressions
+      #   with %1 for the language
+      # @return a map lang_code => filename
+      def license_files(patterns)
+        files = SCR.Read(Yast::Path.new(".target.dir"), directory)
+        log.info("All files in license directory: #{files}")
+
+        # no license
+        return {} if files == nil
+
+        ret = {}
+        patterns.each do |p|
+          if p.include? "%" # expansion
+            files.each do |file|
+              #Possible license file names are regexp patterns
+              #(see list <string> license_patterns)
+              #so we should treat them as such (bnc#533026)
+              if Builtins.regexpmatch(file, p)
+                ret[""] = File.join(directory, file)
+              end
+            end
+          else
+            regpat = Builtins.sformat(p, "(.+)")
+            files.each do |file|
+              if Builtins.regexpmatch(file, regpat)
+                key = Builtins.regexpsub(file, regpat, "\\1")
+                ret[key] = File.join(directory, file)
+              end
+            end
+          end
+        end
+        log.info "Files containing license: #{ret}"
+
+        ret
       end
 
       private
@@ -808,13 +801,13 @@ module Yast
       # License does not need to be accepted. Well, I mean, manually selected "Yes, of course, I agree..."
       if license && !license.acceptance_needed?
         if id == nil
-          Builtins.y2error("Parameter id not set")
+          log.error("Parameter id not set") #FIXME this deserve exception
         else
           SetAcceptanceNeeded(id, false)
         end
       end
 
-      licenses.value = LicenseFiles(@license_dir, @license_patterns)
+      licenses.value = license ? license.license_files(@license_patterns) : {}
 
       # all other 'licenses' could be replaced by this one
       Ops.set(@all_licenses, id, licenses.value)
