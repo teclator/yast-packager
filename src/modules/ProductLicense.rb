@@ -612,6 +612,14 @@ module Yast
         ret
       end
 
+      def available_languages
+        # FIXME need to solve if patterns are fixed or not, otherwise it
+        # depends too much
+        raise "Bad calling order" unless @files_cache
+
+        @files_cache.keys
+      end
+
       def license_path_for_lang(language)
         return "" unless @files_cache
 
