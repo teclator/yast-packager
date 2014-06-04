@@ -608,6 +608,10 @@ module Yast
         @file_print = nil
       end
 
+      def acceptance_needed?
+        !FileUtils.Exists("#{directory}/no-acceptance-needed")
+      end
+
       private
 
       def unpack_tarball(path)
@@ -655,19 +659,25 @@ module Yast
       if FileUtils.Exists(license_file)
         log.info("Installation Product has a license")
 
-        License.new(license_file)
+        license = License.new(license_file)
 
         if license.directory # not needed when exception used
           @license_dir = license.directory
           @license_file_print = license.file_print
         end
       else
+        license = nil
         log.info("Installation Product doesn't have a license")
       end
 
-      @info_file = "/info.txt" if FileUtils.Exists("/info.txt")
+      if FileUtils.Exists("/info.txt")
+        info = Info.new ("/info.txt")
+        @info_file = info.path
+      else
+        info = nil
+      end
 
-      nil
+      return license, info
     end
 
     def SearchForLicense_LiveCDInstallation
@@ -682,32 +692,48 @@ module Yast
       @license_file_print = license.file_print if license
 
       info = Info.find_beta(license_locations)
+
+      return license, info
     end
 
     def SearchForLicense_NormalRunBaseProduct(fallback_dir)
       Builtins.y2milestone("Using default license directory %1", fallback_dir)
 
       if FileUtils.Exists(fallback_dir)
-        @license_dir = fallback_dir
+        license = License.new(fallback_dir)
+        @license_dir = license.directory
       else
         Builtins.y2warning("Fallback dir doesn't exist %1", fallback_dir)
+        license = nil
         @license_dir = nil
       end
 
-      @info_file = "/info.txt" if FileUtils.Exists("/info.txt")
+      if FileUtils.Exists("/info.txt")
+        info = Info.new ("/info.txt")
+        @info_file = info.path
+      else
+        info = nil
+      end
 
-      nil
+      return license, info
     end
 
     def SearchForLicense_AddOnProduct(src_id)
       Builtins.y2milestone("Getting license info from repository %1", src_id)
 
-      @info_file = Pkg.SourceProvideDigestedFile(
+      info_path = Pkg.SourceProvideDigestedFile(
         src_id, # optional
         1,
         "/media.1/info.txt",
         true
       )
+      if info_path
+        info = Info.new(info_path)
+        @info_path = info.path
+      else
+        info = nil
+        @info_path = nil
+      end
 
       # FATE #302018 comment #54
       license = License.find_license(src_id)
@@ -717,66 +743,12 @@ module Yast
         return
       end
 
-      Builtins.y2milestone(
-        "Licenses in %1... not supported",
-        license_file_location
-      )
-
-      @tmpdir = Builtins.sformat(
-        "%1/product-license/%2/",
-        Convert.to_string(SCR.Read(path(".target.tmpdir"))),
-        src_id
-      )
-
-      # New format didn't work, try the old one 1stMedia:/media.1/license.zip
-      @license_dir = @tmpdir
-      license_file = Pkg.SourceProvideDigestedFile(
-        src_id, # optional
-        1,
-        "/media.1/license.zip",
-        true
-      )
-
-      # no license present
-      if license_file == nil
-        Builtins.y2milestone("No license present")
-        @license_dir = nil
-        @tmpdir = nil
-        # return from the function
-        return
-      end
-
-      Builtins.y2milestone("Product has a license")
-      out = Convert.to_map(
-        SCR.Execute(
-          path(".target.bash_output"),
-          Builtins.sformat(
-            "\nrm -rf '%1' && mkdir -p '%1' && cd '%1' && unzip -qqo '%2'\n",
-            String.Quote(@tmpdir),
-            String.Quote(license_file)
-          )
-        )
-      )
-
-      # Extracting license failed, cannot accept the license
-      if Ops.get_integer(out, "exit", 0) != 0
-        Builtins.y2error("Cannot unzip license -> %1", out)
-        # popup error
-        Report.Error(
-          _("An error occurred while preparing the installation system.")
-        )
-        CleanUpLicense(@tmpdir)
-        @license_dir = nil
-      else
-        @license_dir = @tmpdir
-        @license_file_print = "/media.1/license.zip"
-      end
-
-      nil
+      return license, info
     end
 
     # Functions for handling different locations of licenses <--
 
+    # returns [Array<License,Info>] tuple with license and info file
     def GetSourceLicenseDirectory(src_id, fallback_dir)
       Builtins.y2milestone(
         "Searching for licenses... (src_id: %1, fallback_dir: %2, mode: %3, stage: %4)",
@@ -791,24 +763,24 @@ module Yast
       # Bugzilla #299732
       # Base Product - LiveCD installation
       if Mode.live_installation
-        SearchForLicense_LiveCDInstallation
+        res = SearchForLicense_LiveCDInstallation()
 
         # Base-product - license not in installation
         #   * Stage is not initial
         #   * source ID is not defined
       elsif !Stage.initial && src_id == nil
-        SearchForLicense_NormalRunBaseProduct(fallback_dir)
+        res = SearchForLicense_NormalRunBaseProduct(fallback_dir)
 
         # Base-product - first-stage installation
         #   * Stage is initial
         #   * Source ID is not set
         # bugzilla #298342
       elsif Stage.initial && src_id == nil
-        SearchForLicense_FirstStageBaseProduct
+        res = SearchForLicense_FirstStageBaseProduct()
         # Add-on-product license
         #   * Source ID is set
       elsif src_id != nil && Ops.greater_than(src_id, -1)
-        SearchForLicense_AddOnProduct(src_id)
+        res = SearchForLicense_AddOnProduct(src_id)
         # Fallback
       else
         Builtins.y2warning(
@@ -816,6 +788,7 @@ module Yast
           fallback_dir
         )
         @license_dir = fallback_dir
+        res = License.new(fallback_dir), nil
       end
 
       Builtins.y2milestone(
@@ -825,17 +798,15 @@ module Yast
         @info_file
       )
 
-      nil
+      return res
     end
 
 
     def InitLicenseData(src_id, dir, licenses, available_langs, require_agreement, license_ident, id)
-      GetSourceLicenseDirectory(src_id, dir)
+      license, info = GetSourceLicenseDirectory(src_id, dir)
 
       # License does not need to be accepted. Well, I mean, manually selected "Yes, of course, I agree..."
-      if FileUtils.Exists(
-          Builtins.sformat("%1/no-acceptance-needed", @license_dir)
-        )
+      if license && !license.acceptance_needed?
         if id == nil
           Builtins.y2error("Parameter id not set")
         else
