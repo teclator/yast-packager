@@ -637,10 +637,24 @@ module Yast
       attr_reader :directory, :file_print
 
       LICENSE_TARBALL = "license.tar.gz"
+      # param [Array,Fixnum,nil] locations where to search for info file
+      #   can be array of directories, number for repository id or nil, which means
+      #   search in base product
       def self.find_license(locations)
-        license_paths = locations.map { |l| l+= "/#{LICENSE_TARBALL}" }
-
-        license_path = locations.find { |l| FileUtils.Exists(l) }
+        path = case locations
+          when Array
+            license_paths = locations.map { |l| l+= "/#{LICENSE_TARBALL}" }
+            locations.find { |l| FileUtils.Exists(l) }
+          when Fixnum, nil
+            license_file = Pkg.SourceProvideDigestedFile(
+              locations, # optional
+              1,
+              "/#{LICENSE_TARBALL}",
+              true
+            )
+          else
+            raise(ArgumentError, "Invalid parameter #{locations.inspect}")
+          end
 
         log.info "License path #{license_path.inspect}"
 
@@ -648,7 +662,7 @@ module Yast
       end
 
       def initialize(path)
-        @file_print = path
+        @file_print = LICENSE_TARBALL
         unpack_tarball(path)
         @directory = @tmpdir
       end
@@ -710,7 +724,6 @@ module Yast
       @license_file_print = license.file_print if license
 
       info = Info.find_beta(license_locations)
-      @info_file = info ? info.path : nil
     end
 
     def SearchForLicense_NormalRunBaseProduct(src_id, fallback_dir)
@@ -738,38 +751,23 @@ module Yast
         true
       )
 
-      # using a separate license directory for all products
-      @tmpdir = Builtins.sformat(
-        "%1/product-license/%2/",
-        Convert.to_string(SCR.Read(path(".target.tmpdir"))),
-        src_id
-      )
-
       # FATE #302018 comment #54
-      license_file_location = "/license.tar.gz"
-      license_file = Pkg.SourceProvideDigestedFile(
-        src_id, # optional
-        1,
-        license_file_location,
-        true
-      )
-
-      if license_file != nil
-        Builtins.y2milestone("Using file %1 with licenses", license_file)
-
-        if UnpackLicenseTgzFileToDirectory(license_file, @tmpdir)
-          @license_dir = @tmpdir
-          @license_file_print = "license.tar.gz"
-        else
-          @license_dir = nil
-        end
-
+      license = License.find_license(src_id)
+      if license
+        @license_dir = license.directory
+        @license_file_print = license.file_print
         return
       end
 
       Builtins.y2milestone(
         "Licenses in %1... not supported",
         license_file_location
+      )
+
+      @tmpdir = Builtins.sformat(
+        "%1/product-license/%2/",
+        Convert.to_string(SCR.Read(path(".target.tmpdir"))),
+        src_id
       )
 
       # New format didn't work, try the old one 1stMedia:/media.1/license.zip
