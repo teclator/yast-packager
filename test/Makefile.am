@@ -1,5 +1,6 @@
 TESTS = \
-  packages_test.rb
+  packages_test.rb \
+  product_license_test.rb
 
 TEST_EXTENSIONS = .rb
 RB_LOG_COMPILER = rspec
