@@ -573,6 +573,12 @@ module Yast
       #   with %1 for the language
       # @return a map lang_code => filename
       def license_files(patterns)
+        # pattern almost never changes, so cache it singular and only
+        # if patterns changed, recreate cache
+        @files_cache = nil if @files_cache_patterns != patterns
+        return @files_cache if @files_cache
+        @files_cache_patterns = patterns
+
         files = SCR.Read(Yast::Path.new(".target.dir"), directory)
         log.info("All files in license directory: #{files}")
 
@@ -602,7 +608,14 @@ module Yast
         end
         log.info "Files containing license: #{ret}"
 
+        @files_cache = ret
         ret
+      end
+
+      def license_path_for_lang(language)
+        return "" unless @files_cache
+
+        @files_cache[language] || ""
       end
 
       private
@@ -860,15 +873,7 @@ module Yast
       # fallback
       license_ident_lang ||= @lic_lang
 
-      base_license = (
-        licenses_ref = arg_ref(licenses.value);
-        _WhichLicenceFile_result = WhichLicenceFile(
-          license_ident_lang,
-          licenses_ref
-        );
-        licenses.value = licenses_ref.value;
-        _WhichLicenceFile_result
-      )
+      base_license = license.license_path_for_lang(license_ident_lang)
       license_ident.value = GetLicenseIdentString(base_license)
 
       # agreement might be required even if license has been already accepted
