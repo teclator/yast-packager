@@ -523,10 +523,19 @@ module Yast
 
     # Functions for handling different locations of licenses -->
 
-    class License
+    class LicenseTarball
       attr_reader :directory, :file_print
 
       LICENSE_TARBALL = "license.tar.gz"
+      LICENSE_PATTERNS = [
+        "license\\.html",
+        "license\\.%1\\.html",
+        "license\\.htm",
+        "license\\.%1\\.htm",
+        "license\\.txt",
+        "license\\.%1\\.txt"
+      ]
+
       # param [Array,Fixnum,nil] locations where to search for info file
       #   can be array of directories, number for repository id or nil, which means
       #   search in base product
@@ -546,9 +555,9 @@ module Yast
             raise(ArgumentError, "Invalid parameter #{locations.inspect}")
           end
 
-        log.info "License path #{license_path.inspect}"
+        log.info "License tarball path #{license_path.inspect}"
 
-        return license_path ? License.new(license_path) : nil
+        return license_path ? LicenseTarball.new(license_path) : nil
       end
 
       def initialize(path)
@@ -568,16 +577,11 @@ module Yast
       end
 
       # Get all files with license existing in specified directory
-      # @param [String] dir string directory to look into
-      # @param [Array<String>] patterns a list of patterns for the files, regular expressions
-      #   with %1 for the language
       # @return a map lang_code => filename
-      def license_files(patterns)
+      def license_files
         # pattern almost never changes, so cache it singular and only
         # if patterns changed, recreate cache
-        @files_cache = nil if @files_cache_patterns != patterns
         return @files_cache if @files_cache
-        @files_cache_patterns = patterns
 
         files = SCR.Read(Yast::Path.new(".target.dir"), directory)
         log.info("All files in license directory: #{files}")
@@ -586,7 +590,7 @@ module Yast
         return {} if files == nil
 
         ret = {}
-        patterns.each do |p|
+        LICENSE_PATTERNS.each do |p|
           if p.include? "%" # expansion
             files.each do |file|
               #Possible license file names are regexp patterns
@@ -613,17 +617,11 @@ module Yast
       end
 
       def available_languages
-        # FIXME need to solve if patterns are fixed or not, otherwise it
-        # depends too much
-        raise "Bad calling order" unless @files_cache
-
-        @files_cache.keys
+        license_files.keys
       end
 
       def license_path_for_lang(language)
-        return "" unless @files_cache
-
-        @files_cache[language] || ""
+        license_files[language] || ""
       end
 
       private
@@ -673,7 +671,7 @@ module Yast
       if FileUtils.Exists(license_file)
         log.info("Installation Product has a license")
 
-        license = License.new(license_file)
+        license = LicenseTarball.new(license_file)
 
         if license.directory # not needed when exception used
           @license_dir = license.directory
@@ -701,7 +699,7 @@ module Yast
       license_locations = ["/usr/share/doc/licenses/", "/"]
 
       # FIXME leaking of tmpdir, but do not store tmpdir to @tmpdir
-      license = License.find_license(license_locations)
+      license = LicenseTarball.find_license(license_locations)
       @license_dir = license ? license.directory : nil
       @license_file_print = license.file_print if license
 
@@ -714,7 +712,7 @@ module Yast
       Builtins.y2milestone("Using default license directory %1", fallback_dir)
 
       if FileUtils.Exists(fallback_dir)
-        license = License.new(fallback_dir)
+        license = LicenseTarball.new(fallback_dir)
         @license_dir = license.directory
       else
         Builtins.y2warning("Fallback dir doesn't exist %1", fallback_dir)
@@ -750,7 +748,7 @@ module Yast
       end
 
       # FATE #302018 comment #54
-      license = License.find_license(src_id)
+      license = LicenseTarball.find_license(src_id)
       if license
         @license_dir = license.directory
         @license_file_print = license.file_print
@@ -802,7 +800,7 @@ module Yast
           fallback_dir
         )
         @license_dir = fallback_dir
-        res = License.new(fallback_dir), nil
+        res = LicenseTarball.new(fallback_dir), nil
       end
 
       Builtins.y2milestone(
@@ -828,7 +826,7 @@ module Yast
         end
       end
 
-      licenses.value = license ? license.license_files(@license_patterns) : {}
+      licenses.value = license ? license.license_files : {}
 
       # all other 'licenses' could be replaced by this one
       Ops.set(@all_licenses, id, licenses.value)
