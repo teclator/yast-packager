@@ -1344,6 +1344,22 @@ define integer AddRepo(string url, string pth, integer priority) {
     // update the URL to the selected device
     map <string, any> new_repo = $[ "enabled" : true, "base_urls" : [url], "prod_dir" : pth ];
 
+    map parsed = URL::Parse(url);
+    string query = parsed["query"]:"";
+
+    if (size(query) > 0)
+    {
+        map<string, string> params = URL::MakeMapFromParams(query);
+        string alias = params["alias"]:"";
+
+        if (size(alias) > 0)
+        {
+            alias = URL::UnEscapeString(alias, URL::transform_map_query);
+            y2milestone("Using repository alias from URL: %1", alias);
+            new_repo["alias"] = alias;
+        }
+    }
+
     // BNC #714027: Possibility to adjust repository priority (usually higher)
     if (priority > -1) new_repo["priority"] = priority;
 

@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Thu Feb  5 16:38:46 UTC 2015 - lslezak@suse.cz
+
+- Set repository alias from "alias" URL parameter when adding
+  addons from add_on_products.xml file (bnc#892431)
+
+-------------------------------------------------------------------
 Fri May 31 11:28:08 UTC 2013 - lslezak@suse.cz
 
 - removed writing a debug file (bnc#822615)
